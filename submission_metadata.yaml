@@ -70,10 +70,12 @@ methodology_summary: |
   CV-without-NLP, pure-research-without-production, title-vs-work mismatch) and anti-fit penalties.
   Semantic fit is bge-small cosine of the JD against each candidate's career prose (not the noisy
   skill list), which is the decisive signal against keyword-stuffer traps. A 6-signal behavioral
-  multiplier down-weights unavailable candidates. ~80 honeypots are removed up front via an
-  impossibility battery (skill/tool anachronisms, impossible tenure, company-founded-after dates,
-  expert-skill-with-zero-months); 0 reach the top-100. Final = 0.75*structured + 0.25*semantic,
-  scaled by behavioral x logistics, with an assessment-quality refinement over a top-150 shortlist.
+  multiplier down-weights unavailable candidates, while an experience multiplier peaks at the JD's
+  ideal 6-8 year band and keeps 5-9 years as the target range. ~80 honeypots are removed up front
+  via an impossibility battery (skill/tool anachronisms, impossible tenure, company-founded-after
+  dates, expert-skill-with-zero-months); 0 reach the top-100. Final = 0.75*structured +
+  0.25*semantic, scaled by behavioral x logistics x experience, with an assessment-quality
+  refinement over a top-150 shortlist.
 
 # ============================================================================
 # Declarations

@@ -11,7 +11,7 @@ logistics signals **modulate** availability. Honeypots and disqualified profiles
 
 ```
 fit        = 0.75 · struct_norm + 0.25 · sem_norm
-base_final = fit · behavioral · logistics · early_band_mult        # honeypots/disqualified excluded
+base_final = fit · behavioral · logistics · experience_mult · early_band_mult
 final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 → top-100
 ```
 

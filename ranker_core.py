@@ -533,6 +533,26 @@ def assessment_refine(score):
     return 0.0
 
 
+def experience_factor(yoe):
+    """Prefer the JD's ideal 6-8 year band, with 5-9 as the broader target."""
+    if pd.isna(yoe):
+        return 0.0
+    y = float(yoe)
+    if y < 4.5:
+        return 0.58
+    if y < 5.0:
+        return 0.78
+    if y < 6.0:
+        return 0.92
+    if y <= 8.0:
+        return 1.00
+    if y <= 9.0:
+        return 0.92
+    if y <= 10.0:
+        return 0.78
+    return 0.62
+
+
 def rank(feat, cand_emb, cand_ids, jd_emb):
     """Hybrid blend over the genuine tier-5 pool. `feat` is indexed by candidate_id.
     Returns the top-100 DataFrame in rank order (index = candidate_id)."""
@@ -581,9 +601,10 @@ def rank(feat, cand_emb, cand_ids, jd_emb):
     assess0_R = R['assess_avg'].fillna(0.0)
     early_band_R = (R['yoe'] >= 4) & (R['yoe'] < 4.5)
     R['early_band_mult'] = np.where(early_band_R & (assess0_R < EARLY_FULL_ASSESS), EARLY_PARTIAL_MULT, 1.0)
+    R['experience_mult'] = R['yoe'].apply(experience_factor)
 
     R['fit'] = 0.75 * R['struct_norm'] + 0.25 * R['sem_norm']
-    R['base_final'] = R['fit'] * R['behavioral'] * R['logistics'] * R['early_band_mult']
+    R['base_final'] = R['fit'] * R['behavioral'] * R['logistics'] * R['early_band_mult'] * R['experience_mult']
     R['assessment_refine'] = R['assess_eff'].apply(assessment_refine)
 
     shortlist = R.sort_values(['base_final', 'candidate_id'], ascending=[False, True]).head(150).copy()
@@ -660,6 +681,7 @@ def build_outputs(top, recs):
                 'fit': round(float(r['fit']), 4),
                 'behavioral': round(float(r['behavioral']), 3),
                 'logistics': round(float(r['logistics']), 3),
+                'experience_mult': round(float(r['experience_mult']), 3),
                 'tier': int(r['tier']),
                 'effective_yoe': round(float(r['yoe']), 2),
                 'profile_yoe': (None if pd.isna(r.get('profile_yoe')) else round(float(r.get('profile_yoe')), 2)),
