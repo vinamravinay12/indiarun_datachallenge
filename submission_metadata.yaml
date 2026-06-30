@@ -23,7 +23,7 @@ team_members:
 # ============================================================================
 github_repo: "https://github.com/vinamravinay12/indiarun_datachallenge"
 
-sandbox_link: "TODO-hosted-sandbox-url"
+sandbox_link: "https://colab.research.google.com/github/vinamravinay12/indiarun_datachallenge/blob/main/sandbox/sandbox_demo.ipynb"
 # REQUIRED by the portal. A working hosted env (HuggingFace Spaces / Streamlit Cloud /
 # Replit / Colab / Binder) where rank.py can run on a small candidate sample. Not yet created.
 
