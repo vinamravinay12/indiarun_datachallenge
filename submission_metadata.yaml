@@ -1,0 +1,86 @@
+# Redrob Hackathon — Submission Metadata
+# Mirrors the portal metadata; Stage-3 review checks this against the portal form.
+# Fields marked TODO need your input before submission.
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "TODO-your-registered-participant-id"   # must match your portal/participant ID
+
+primary_contact:
+  name: "Vinamra Vinay"
+  email: "vinamravinay235@gmail.com"
+  phone: "TODO-+91-XXXXXXXXXX"
+
+team_members:
+  - name: "Vinamra Vinay"
+    email: "vinamravinay235@gmail.com"
+    role: "ML Engineer"
+  # add more members if applicable; solo participants list just one
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/vinamravinay12/indiarun_datachallenge"
+
+sandbox_link: "TODO-hosted-sandbox-url"
+# REQUIRED by the portal. A working hosted env (HuggingFace Spaces / Streamlit Cloud /
+# Replit / Colab / Binder) where rank.py can run on a small candidate sample. Not yet created.
+
+reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
+# Ranking step: CPU-only, no network, ~34s. Embeddings are precomputed once via:
+#   python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "MacBook (Apple Silicon)"
+  cpu_cores: 12
+  ram_gb: 24                          # ranking step stays well under the 16 GB limit
+  python_version: "3.13.9"
+  os: "macOS 26.6"
+  uses_gpu_for_inference: false        # rank.py is CPU-only; MPS used only for offline precompute
+  has_network_during_ranking: false    # no API/model calls during ranking
+  pre_computation_required: true        # bge-small embeddings are precomputed offline
+  pre_computation_time_minutes: 5       # approx, encoding 100k candidates on Apple MPS
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Claude"        # architecture, scoring design, code review, the .py reproducer
+  - "Other"         # OpenAI Codex CLI — weight tuning, candidate spot-checks
+
+ai_usage_summary: |
+  Claude (Claude Code) was used as a pair-engineer for architecture discussion, scoring design,
+  honeypot-detection strategy, and turning the notebooks into the reproducible rank.py pipeline.
+  OpenAI Codex CLI was used for some weight tuning and adversarial candidate spot-checks. All design
+  decisions, thresholds, and trade-offs were reviewed and chosen by the author; no candidate data was
+  sent to any hosted LLM during the ranking step (it runs offline on CPU).
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Hybrid ranker: structured evidence gates domain fit, an embedding model fine-ranks, and
+  behavioral/logistics signals modulate availability. Structured scoring uses explicit JD-derived
+  weights (experience band peaking at 6-8 yrs, production retrieval/vector/eval evidence, verified
+  assessment, product-company context, graded location) plus hard disqualifiers (consulting-only,
+  CV-without-NLP, pure-research-without-production, title-vs-work mismatch) and anti-fit penalties.
+  Semantic fit is bge-small cosine of the JD against each candidate's career prose (not the noisy
+  skill list), which is the decisive signal against keyword-stuffer traps. A 6-signal behavioral
+  multiplier down-weights unavailable candidates. ~80 honeypots are removed up front via an
+  impossibility battery (skill/tool anachronisms, impossible tenure, company-founded-after dates,
+  expert-skill-with-zero-months); 0 reach the top-100. Final = 0.75*structured + 0.25*semantic,
+  scaled by behavioral x logistics, with an assessment-quality refinement over a top-150 shortlist.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true        # explicit honeypot detection + exclusion (0 in top-100)
+  reproduction_tested: true        # rank.py reproduces submission.csv byte-for-byte, ~34s on CPU

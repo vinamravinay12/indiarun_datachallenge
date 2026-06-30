@@ -269,6 +269,7 @@ def extract_row(c):
         n_skills=len(sk_names),
         edu_tier=(edu[0].get('tier') if edu else None),
         response_rate=sig.get('recruiter_response_rate'),
+        avg_response_hours=sig.get('avg_response_time_hours'),
         days_inactive=days_inactive,
         open_to_work=sig.get('open_to_work_flag'),
         notice_days=sig.get('notice_period_days'),
@@ -452,17 +453,25 @@ def struct_score(r):
 
 
 def behavioral_multiplier(r):
-    resp = r['response_rate'] if pd.notna(r['response_rate']) else 0.0
-    if resp > 0.60:
-        response_factor = 0.70
-    elif resp >= 0.40:
-        response_factor = 0.40
-    else:
-        response_factor = 0.10
-    di = r['days_inactive'] if pd.notna(r['days_inactive']) else 220
+    """Consolidated availability/hireability score over 6 redrob behavioral signals
+    (JD directive #3). Used as a multiplier on the structured+semantic fit. Range ~0.10..1.00.
+    Missing/not-applicable signals fall back to neutral values (never a blind penalty)."""
+    resp = r.get('response_rate')                                          # #7 recruiter_response_rate
+    resp = float(resp) if pd.notna(resp) else 0.0
+    di = r.get('days_inactive')                                            # #3 last_active_date
+    di = float(di) if pd.notna(di) else 220.0
     recency = max(0.0, min(1.0, (270 - di) / (270 - 40)))
-    otw = 1.0 if r['open_to_work'] else 0.0
-    return round(response_factor + 0.20 * recency + 0.10 * otw, 3)
+    interview = r.get('interview_completion')                              # #19 interview_completion_rate
+    interview = float(interview) if pd.notna(interview) else 0.6
+    hrs = r.get('avg_response_hours')                                      # #8 avg_response_time_hours
+    hrs = float(hrs) if pd.notna(hrs) else 120.0
+    speed = max(0.0, min(1.0, (168 - hrs) / (168 - 24)))                   # <=24h -> 1, >=1wk -> 0
+    otw = 1.0 if r.get('open_to_work') else 0.0                            # #4 open_to_work_flag
+    offer = r.get('offer_acceptance')                                      # #20 offer_acceptance_rate
+    offer = float(offer) if (pd.notna(offer) and offer is not None and offer >= 0) else 0.55  # -1/missing -> neutral
+    score = (0.30 * resp + 0.18 * recency + 0.18 * interview
+             + 0.12 * speed + 0.10 * otw + 0.12 * offer)
+    return round(0.10 + 0.90 * score, 3)
 
 
 def build_feature_frame(candidates):
