@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rank.py — produce the top-100 submission CSV from candidates.jsonl.
+rank.py - produce the top-100 submission CSV from candidates.jsonl.
 
 This is the constrained ranking step (challenge spec section 3): <=5 min wall-clock,
 <=16 GB RAM, CPU-only, no network. It:

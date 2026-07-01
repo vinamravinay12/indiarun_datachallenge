@@ -1,4 +1,4 @@
-# Ranking step (rank.py) — CPU-only, no network. These are all it needs.
+# Ranking step (rank.py) - CPU-only, no network. These are all it needs.
 numpy==2.1.3
 pandas==2.2.3
 

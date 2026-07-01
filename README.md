@@ -1,59 +1,59 @@
-# IndiaRun — Intelligent Candidate Discovery & Ranking
+# IndiaRun - Intelligent Candidate Discovery & Ranking
 
 Solution for the Redrob **Intelligent Candidate Discovery & Ranking Challenge**: rank the top 100
-of 100,000 candidates against the Senior AI Engineer JD — seeing **semantic fit beyond keywords**,
+of 100,000 candidates against the Senior AI Engineer JD - seeing **semantic fit beyond keywords**,
 integrating profile / career / behavioral signals, and excluding the planted **honeypot** candidates.
 
-## Approach — a hybrid ranker
+## Approach - a hybrid ranker
 
 Structured evidence **gates** domain fit; the embedding model **fine-ranks**; behavioral and
 logistics signals **modulate** availability. Honeypots and disqualified profiles are removed first.
 
 ```
-fit        = 0.75 · struct_norm + 0.25 · sem_norm
-base_final = fit · behavioral · logistics · experience_mult · early_band_mult
-final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 → top-100
+fit        = 0.75 * struct_norm + 0.25 * sem_norm
+base_final = fit * behavioral * logistics * experience_mult * early_band_mult
+final      = 0.95 * base_norm(top-150) + 0.05 * assessment_refine   # top-150 -> top-100
 ```
 
-- `struct_norm` — normalized structured JD-fit score from `ranker_core.struct_score`: experience,
+- `struct_norm` - normalized structured JD-fit score from `ranker_core.struct_score`: experience,
   applied ML tenure, Python evidence, production retrieval/recsys/search evidence, vector/hybrid
   infrastructure, ranking evaluation, product-company context, location, and anti-fit penalties.
-- `sem_norm` — normalized cosine similarity between the JD query embedding and the candidate's
+- `sem_norm` - normalized cosine similarity between the JD query embedding and the candidate's
   career prose embedding. This catches candidates who built matching/recommendation/search systems
   without using the exact JD keywords.
-- `fit` — blended quality score before availability/logistics. Structured evidence gets 75% weight
+- `fit` - blended quality score before availability/logistics. Structured evidence gets 75% weight
   so keyword/embedding similarity cannot overpower actual career evidence.
-- `behavioral` — availability multiplier from Redrob signals: recruiter response rate, recency,
+- `behavioral` - availability multiplier from Redrob signals: recruiter response rate, recency,
   interview completion, response speed, open-to-work, and offer acceptance.
-- `logistics` — India/location/relocation/notice-period multiplier. India-based preferred-location
+- `logistics` - India/location/relocation/notice-period multiplier. India-based preferred-location
   candidates with short notice are favored; non-India candidates are heavily suppressed because the
   JD has no sponsorship.
-- `experience_mult` — JD experience preference: peaks at 6-8 years, keeps 5-9 years strong, and
+- `experience_mult` - JD experience preference: peaks at 6-8 years, keeps 5-9 years strong, and
   allows exceptional 4-5 year candidates without letting them dominate.
-- `early_band_mult` — extra safeguard for 4.0-4.5 year candidates; they need strong retrieval/prod
+- `early_band_mult` - extra safeguard for 4.0-4.5 year candidates; they need strong retrieval/prod
   evidence and verified assessment strength to remain competitive.
-- `base_final` — main ranking score used to pick a top-150 shortlist after fit, behavioral,
+- `base_final` - main ranking score used to pick a top-150 shortlist after fit, behavioral,
   logistics, and experience constraints are applied.
-- `assessment_refine` — small second-stage boost from verified skill assessments. It only moves
+- `assessment_refine` - small second-stage boost from verified skill assessments. It only moves
   candidates within the top-150 shortlist and cannot rescue weak JD-fit profiles.
-- `final` — published score used for the top-100 CSV: mostly normalized `base_final`, with a 5%
+- `final` - published score used for the top-100 CSV: mostly normalized `base_final`, with a 5%
   assessment refinement.
 
-- **Structured fit** (`struct_score`) — explicit JD-derived weights: experience band (peaks at the
-  JD's ideal 6–8 yrs), applied-ML years, strong-Python evidence, verified Redrob IR assessment,
+- **Structured fit** (`struct_score`) - explicit JD-derived weights: experience band (peaks at the
+  JD's ideal 6-8 yrs), applied-ML years, strong-Python evidence, verified Redrob IR assessment,
   production-retrieval / vector-infra / ranking-evaluation prose, ML title, product-company context,
-  graded location. Hard **disqualifiers** (→ tier 0): under-min experience, consulting-only career,
+  graded location. Hard **disqualifiers** (-> tier 0): under-min experience, consulting-only career,
   non-eng title without ML, CV/speech-without-NLP, pure-research-without-production, impossible YOE.
   **Penalties**: title-chasing, framework-demo-only, recent-LLM-only, closed-source-no-validation,
   CV-primary-with-weak-IR.
-- **Semantic fit** — `bge-small-en-v1.5` cosine of the JD query vs each candidate's **career prose**
+- **Semantic fit** - `bge-small-en-v1.5` cosine of the JD query vs each candidate's **career prose**
   (summary + titles + descriptions, *not* the noise skill list). Embeddings are precomputed + cached.
-- **Behavioral multiplier** (≈0.19–0.93) — 6 redrob signals: recruiter-response rate, recency,
+- **Behavioral multiplier** (~0.19-0.93) - 6 redrob signals: recruiter-response rate, recency,
   interview-completion, response-speed, open-to-work, offer-acceptance (JD directive #3).
-- **Logistics multiplier** — India eligibility, JD-city / relocation, notice period; no visa sponsorship.
-- **Assessment refinement + gates** — a 40% verified-assessment pass floor; missing scores imputed
-  from structured strength; a stricter hard gate for the 4.0–4.5 early-career band.
-- **Honeypot exclusion** — an impossibility battery (skill/experience anachronisms, company-founded-
+- **Logistics multiplier** - India eligibility, JD-city / relocation, notice period; no visa sponsorship.
+- **Assessment refinement + gates** - a 40% verified-assessment pass floor; missing scores imputed
+  from structured strength; a stricter hard gate for the 4.0-4.5 early-career band.
+- **Honeypot exclusion** - an impossibility battery (skill/experience anachronisms, company-founded-
   after dates, overlapping jobs, expert-skill-with-0-months, tenure/YOE contradictions). Rare
   contradictions = deliberate plants and are dropped before ranking (0 of ~80 reach the top-100).
 
@@ -71,16 +71,16 @@ final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 
 
 | Path | What |
 |------|------|
-| `rank.py` | **Canonical reproducer** — the ≤5-min CPU/no-network step that produces `submission.csv` |
+| `rank.py` | **Canonical reproducer** - the <=5-min CPU/no-network step that produces `submission.csv` |
 | `precompute.py` | Offline embedding generation (the slow step that may exceed 5 min) |
-| `ranker_core.py` | Single source of truth — constants, features, honeypot battery, scoring, blend, reasoning |
+| `ranker_core.py` | Single source of truth - constants, features, honeypot battery, scoring, blend, reasoning |
 | `requirements.txt` | Pinned dependencies |
-| `notebooks/explore.ipynb` | **Design record** — feature extraction, honeypot analysis, structured scoring, diagnostics |
-| `notebooks/ranker.ipynb` | **Design record** — semantic encode, hybrid blend, top-100 audit |
+| `notebooks/explore.ipynb` | **Design record** - feature extraction, honeypot analysis, structured scoring, diagnostics |
+| `notebooks/ranker.ipynb` | **Design record** - semantic encode, hybrid blend, top-100 audit |
 | `artifacts/` | Cached embeddings + generated outputs (git-ignored; regenerate embeddings with `precompute.py`) |
 
 `rank.py` / `ranker_core.py` are authoritative for reproduction; the notebooks are the exploration and
-methodology record — how the features, weights, honeypot checks, and audits were developed. The
+methodology record - how the features, weights, honeypot checks, and audits were developed. The
 notebooks produce the **same top-100 ranking** as `rank.py`; `rank.py` pins a reference date so the
 reasoning timestamps are deterministic across re-runs.
 
@@ -92,27 +92,27 @@ The 487 MB candidate pool is supplied separately; symlink or copy it to `data/ca
 ```bash
 pip install -r requirements.txt
 
-# (one-time, offline — encodes 100k candidates with bge-small; GPU/MPS used if available)
+# (one-time, offline - encodes 100k candidates with bge-small; GPU/MPS used if available)
 python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts
 
-# the ranking step — produces the submission
+# the ranking step - produces the submission
 python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv
 ```
 
 If the cached embedding artifacts are already present (`artifacts/cand_emb_256.npy`,
-`cand_ids.json`, `jd_emb_256.npy`), **skip `precompute.py`** — `rank.py` recomputes every structured
+`cand_ids.json`, `jd_emb_256.npy`), **skip `precompute.py`** - `rank.py` recomputes every structured
 / behavioral / blend score live and only loads the embeddings.
 
-### Compute-constraint compliance (spec §3)
+### Compute-constraint compliance (spec Section 3)
 
 | Constraint | Limit | This solution |
 |---|---|---|
-| Ranking runtime | ≤ 5 min | **~34 s** (`rank.py`) |
-| Memory | ≤ 16 GB | well under |
+| Ranking runtime | <= 5 min | **~34 s** (`rank.py`) |
+| Memory | <= 16 GB | well under |
 | Compute | CPU only | `rank.py` is CPU-only (embeddings precomputed) |
 | Network | off | `rank.py` makes no network/API calls |
 
-Only embedding *pre-computation* uses a model/GPU and may exceed 5 min — explicitly permitted by the
+Only embedding *pre-computation* uses a model/GPU and may exceed 5 min - explicitly permitted by the
 spec. The ranking step that emits the CSV is pure CPU feature-extraction + a dot-product blend.
 
 ## Dependencies

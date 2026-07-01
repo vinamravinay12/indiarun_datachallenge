@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-precompute.py — build the cached embedding artifacts the ranker depends on (offline step).
+precompute.py - build the cached embedding artifacts the ranker depends on (offline step).
 
 Encoding 100k candidates with bge-small cannot fit the 5-min CPU ranking budget, so it is done
 here once, offline, where GPU/MPS and a one-time model download are allowed. rank.py then only

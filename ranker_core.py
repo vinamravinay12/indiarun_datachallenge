@@ -1,11 +1,11 @@
 """
-ranker_core.py — single source of truth for the Redrob hybrid candidate ranker.
+ranker_core.py - single source of truth for the Redrob hybrid candidate ranker.
 
 Imported by:
   - precompute.py : builds the cached embedding artifacts (slow, offline, GPU/network OK)
   - rank.py       : the <=5-min CPU/no-network ranking step that produces submission.csv
 
-No file IO or heavy work happens at import time — everything is pure functions over
+No file IO or heavy work happens at import time - everything is pure functions over
 candidate dicts, so this module is safe to import inside the constrained ranking step.
 
 The structured scoring, honeypot battery, behavioral multiplier, and hybrid blend here are
@@ -68,11 +68,13 @@ IR_ASSESS_TOKENS = ['bm25','embedding','faiss','haystack','fine-tun','elasticsea
 
 # ---- explicit JD scoring weights / penalties -------------------------------------------------
 STRUCT_WEIGHTS = {
-    'yoe_target': 1.0,
-    'yoe_ideal': 1.2,   # JD-stated ideal band: 6-8 yrs gets the peak
-    'yoe_greater_target': 0.7,
-    'yoe_slightly_below_target': 0.6,
-    'yoe_below_target': 0.3,
+    # YOE is a LIGHT positive feature here (~35% of prior weight); the seniority-band
+    # preference/guardrail lives mainly in experience_factor() to avoid double-counting.
+    'yoe_target': 0.65,
+    'yoe_ideal': 0.80,   # small 6-8 peak retained
+    'yoe_greater_target': 0.45,
+    'yoe_slightly_below_target': 0.40,
+    'yoe_below_target': 0.20,
     'yoe_far_below_target': 0.0,
     'applied_ml': 1.0,
     'python_strong': 1.5,
@@ -640,23 +642,49 @@ def evidence_terms(rec):
 
 
 def make_reasoning(rec, row):
-    p = rec.get('profile', {}) or {}; sig = rec.get('redrob_signals', {}) or {}
+    """A 1-2 sentence justification. Tone tracks the score (so it can't contradict the rank),
+    surfaces honest concerns, and only references facts actually present in the record."""
+    p = rec.get('profile', {}) or {}
+    title = p.get('current_title') or 'engineer'
+    industry = p.get('current_industry') or 'tech'
+    yoe = row.get('yoe', p.get('years_of_experience'))
     terms = evidence_terms(rec)
-    term_txt = ', '.join(terms[:3]) if terms else 'applied ML/product engineering evidence'
-    la = parse_date(sig.get('last_active_date'))
-    inactive = (TODAY - la).days if la else None
-    resp = sig.get('recruiter_response_rate')
-    notice = sig.get('notice_period_days')
-    loc = p.get('location') or p.get('country') or 'location unspecified'
-    effective_yoe = row.get('yoe', p.get('years_of_experience'))
-    first = (f"{effective_yoe} years as {p.get('current_title')} in {p.get('current_industry')}, "
-             f"with profile/career evidence for {term_txt}.")
+    term_txt = ', '.join(terms[:3]) if terms else 'applied ML and production engineering'
+    # Sentence 1 - concrete career evidence. All top-100 are strong vs the 100k pool, so we state
+    # facts and let the honest caveats below differentiate rank, rather than labelling fit tiers.
+    first = f"{yoe}y as {title} in {industry}, with career evidence of {term_txt}."
+
+    # Sentence 2 - key availability & logistics signals, always stated (recruiter response,
+    # notice period, location + relocation). Values vary per candidate, so this stays non-templated.
+    loc = p.get('location') or p.get('country') or 'location n/a'
     bits = []
-    if resp is not None: bits.append(f"{round(resp * 100)}% recruiter response")
-    if inactive is not None: bits.append(f"active {inactive} days ago")
-    if notice is not None: bits.append(f"{notice}-day notice")
-    bits.append(loc)
-    second = 'Behavioral/logistics signals: ' + ', '.join(bits) + '.'
+    rr = row.get('response_rate')
+    if pd.notna(rr):
+        bits.append(f"{round(float(rr) * 100)}% recruiter response")
+    nd = row.get('notice_days')
+    if pd.notna(nd):
+        bits.append(f"{int(float(nd))}-day notice")
+    if bool(row.get('jd_city')):
+        bits.append(f"based in {loc}")
+    elif bool(row.get('india')) and bool(row.get('willing_relocate')):
+        bits.append(f"in {loc}, willing to relocate to Pune/Noida")
+    elif bool(row.get('india')):
+        bits.append(f"in {loc}, not open to relocating")
+    else:
+        bits.append(f"outside India ({loc}), no visa sponsorship")
+    if bool(row.get('open_to_work')):
+        bits.append("open to work")
+    second = "Signals: " + ", ".join(bits) + "."
+
+    # Honest experience caveat, only where it applies.
+    try:
+        y = float(yoe)
+    except Exception:
+        y = None
+    if y is not None and y < 5:
+        second += f" Note: experience is just under the 5-year target ({yoe}y)."
+    elif y is not None and y > 9:
+        second += f" Note: experience runs above the 5-9 band ({yoe}y)."
     return first + ' ' + second
 
 

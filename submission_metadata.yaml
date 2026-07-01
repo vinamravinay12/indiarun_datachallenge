@@ -1,4 +1,4 @@
-# Redrob Hackathon — Submission Metadata
+# Redrob Hackathon - Submission Metadata
 # Mirrors the portal metadata; Stage-3 review checks this against the portal form.
 # Fields marked TODO need your input before submission.
 
@@ -25,11 +25,12 @@ github_repo: "https://github.com/vinamravinay12/indiarun_datachallenge"
 
 sandbox_link: "https://colab.research.google.com/github/vinamravinay12/indiarun_datachallenge/blob/main/sandbox/sandbox_demo.ipynb"
 # REQUIRED by the portal. A working hosted env (HuggingFace Spaces / Streamlit Cloud /
-# Replit / Colab / Binder) where rank.py can run on a small candidate sample. Not yet created.
+# Replit / Colab / Binder) where rank.py can run on a small candidate sample.
+# This is a Colab notebook (sandbox/sandbox_demo.ipynb) that runs the pipeline on a sample.
 
 reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
 # Ranking step: CPU-only, no network, ~34s. Embeddings are precomputed once via:
-  "python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts"
+#   python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts
 
 # ============================================================================
 # Compute environment
@@ -50,7 +51,7 @@ compute:
 # ============================================================================
 ai_tools_used:
   - "Claude"        # architecture, scoring design, code review, the .py reproducer
-  - "Other"         # OpenAI Codex CLI — weight tuning, candidate spot-checks
+  - "Other"         # OpenAI Codex CLI - weight tuning, candidate spot-checks
 
 ai_usage_summary: |
   Claude (Claude Code) was used as a pair-engineer for architecture discussion, scoring design,
