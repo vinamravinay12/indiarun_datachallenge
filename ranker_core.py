@@ -196,21 +196,19 @@ def work_text(c):
 
 
 # ---- feature extraction (one candidate) ------------------------------------------------------
-def extract_row(c):
-    p = c.get('profile', {}) or {}
-    ch = c.get('career_history', []) or []
-    sig = c.get('redrob_signals', {}) or {}
-    edu = c.get('education', []) or []
-    skills = c.get('skills', []) or []
-    cur_title = lc(p.get('current_title'))
+def candidate_text_fields(p, ch, cur_title):
+    """Return the normalized text blocks reused by feature extractors."""
     summary = lc(p.get('summary'))
-    loc = lc(p.get('location')); ctry = lc(p.get('country'))
     all_desc = ' '.join(lc(j.get('description')) for j in ch)
     all_titles = ' '.join(lc(j.get('title')) for j in ch) + ' ' + cur_title
     company_text = ' '.join(lc(j.get('company')) for j in ch)
     career_text = all_desc + ' ' + all_titles + ' ' + company_text
     text = summary + ' ' + all_desc + ' ' + all_titles
-    sk_names = [lc(s.get('name')) for s in skills if isinstance(s, dict)]
+    return text, career_text, company_text
+
+
+def career_metrics(ch):
+    """Aggregate tenure, product/service mix, and applied-ML tenure from career history."""
     durs = [j.get('duration_months') for j in ch if isinstance(j.get('duration_months'), (int, float))]
     avg_stint = (sum(durs) / len(durs)) if durs else None
     short_stints = sum(1 for d in durs if d and d < 20)
@@ -227,7 +225,18 @@ def extract_row(c):
     service_share = service_months / career_months if career_months else 0
     product_share = product_months / career_months if career_months else 0
     career_yoe = round(career_months / 12, 2) if career_months else None
-    profile_yoe = p.get('years_of_experience')
+    return dict(
+        n_jobs=len(ch), avg_stint_months=avg_stint, short_stints=short_stints,
+        career_months=career_months, service_months=service_months, product_months=product_months,
+        service_share=round(service_share, 3), product_share=round(product_share, 3),
+        service_only_career=bool(ch) and service_months == career_months and product_months == 0,
+        applied_ml_years=round(applied_ml_months / 12, 2),
+        career_yoe=career_yoe,
+    )
+
+
+def grounded_yoe(profile_yoe, career_yoe, ch):
+    """Ground claimed YOE against tenure and first work start date."""
     starts = [parse_date(j.get('start_date')) for j in ch if parse_date(j.get('start_date'))]
     span_yoe = round((TODAY - min(starts)).days / 365.25, 2) if starts else None
     yoe_gap_tenure = (profile_yoe - career_yoe) if (profile_yoe is not None and career_yoe is not None) else 0
@@ -236,34 +245,49 @@ def extract_row(c):
     inflated_yoe = bool(yoe_gap_tenure > 1.5 or profile_yoe_gt_span)
     yoe_candidates = [v for v in [profile_yoe, career_yoe, span_yoe] if v is not None]
     yoe = round(min(yoe_candidates), 2) if inflated_yoe and yoe_candidates else profile_yoe
-    service_only_career = bool(ch) and service_months == career_months and product_months == 0
-    prior_india_work_signal = any(ci in career_text for ci in INDIA_CITIES) or 'india' in career_text or any(emp in company_text for emp in INDIA_EMPLOYER_HINTS)
+    return dict(
+        yoe=yoe, profile_yoe=profile_yoe, span_yoe=span_yoe,
+        yoe_gap_span=round(yoe_gap_span, 2),
+        profile_yoe_gt_span=profile_yoe_gt_span,
+        inflated_yoe=inflated_yoe,
+    )
+
+
+def assessment_signals(sig):
+    """Summarize Redrob skill assessments, including retrieval/IR-specific scores."""
     ass = sig.get('skill_assessment_scores', {}) or {}
     ass_values = list(ass.values())
     ir_scores = [v for k, v in ass.items() if any(tk in k.lower() for tk in IR_ASSESS_TOKENS)]
     ir_assess = max(ir_scores) if ir_scores else 0
+    return dict(
+        ir_assess=ir_assess,
+        assess_avg=(np.mean(ass_values) if ass_values else None),
+        assess_max=(max(ass_values) if ass_values else None),
+    )
+
+
+def behavioral_fields(sig):
+    """Extract Redrob availability/hireability fields used downstream."""
     la = parse_date(sig.get('last_active_date'))
     days_inactive = (TODAY - la).days if la else None
     return dict(
-        candidate_id=c['candidate_id'],
-        yoe=yoe, profile_yoe=profile_yoe, career_yoe=career_yoe, span_yoe=span_yoe,
-        yoe_gap_span=round(yoe_gap_span, 2), profile_yoe_gt_span=profile_yoe_gt_span, inflated_yoe=inflated_yoe,
-        current_title=cur_title,
-        current_industry=lc(p.get('current_industry')),
-        country=ctry, location=loc,
-        india=(ctry == 'india') or any(ci in loc for ci in INDIA_CITIES),
-        prior_india_work_signal=prior_india_work_signal,
-        jd_city=any(ci in loc for ci in JD_CITIES),
-        n_jobs=len(ch), avg_stint_months=avg_stint, short_stints=short_stints,
-        career_months=career_months, service_months=service_months, product_months=product_months,
-        service_share=round(service_share, 3), product_share=round(product_share, 3),
-        service_only_career=service_only_career,
-        applied_ml_years=round(applied_ml_months / 12, 2),
-        ir_assess=ir_assess,
-        is_ml_title=any(m in cur_title for m in ML_TITLE),
-        is_noneng_title=any(nt in cur_title for nt in NONENG_TITLES),
-        consulting_only=bool(ch) and all(any(cf in lc(j.get('company')) for cf in CONSULTING) for j in ch),
-        in_product_now=lc(p.get('current_industry')) in PRODUCT_INDS,
+        response_rate=sig.get('recruiter_response_rate'),
+        avg_response_hours=sig.get('avg_response_time_hours'),
+        days_inactive=days_inactive,
+        open_to_work=sig.get('open_to_work_flag'),
+        notice_days=sig.get('notice_period_days'),
+        willing_relocate=sig.get('willing_to_relocate'),
+        interview_completion=sig.get('interview_completion_rate'),
+        offer_acceptance=sig.get('offer_acceptance_rate'),
+        github=sig.get('github_activity_score'),
+        completeness=sig.get('profile_completeness_score'),
+        saved_30d=sig.get('saved_by_recruiters_30d'),
+    )
+
+
+def evidence_counts(text):
+    """Phrase-count features derived from profile and career prose, not noisy skills."""
+    return dict(
         ml_evidence=count_hits(text, ML_EVIDENCE),
         retrieval_evidence=count_hits(text, RETRIEVAL_EVIDENCE),
         vector_infra_evidence=count_hits(text, VECTOR_INFRA),
@@ -277,22 +301,52 @@ def extract_row(c):
         research_hits=count_hits(text, RESEARCH_HINT),
         cv_speech_hits=count_hits(text, CV_SPEECH),
         nlp_present=('nlp' in text or 'retrieval' in text or 'language model' in text or 'information retrieval' in text),
+    )
+
+
+def extract_row(c):
+    p = c.get('profile', {}) or {}
+    ch = c.get('career_history', []) or []
+    sig = c.get('redrob_signals', {}) or {}
+    edu = c.get('education', []) or []
+    skills = c.get('skills', []) or []
+    cur_title = lc(p.get('current_title'))
+    loc = lc(p.get('location')); ctry = lc(p.get('country'))
+    text, career_text, company_text = candidate_text_fields(p, ch, cur_title)
+    sk_names = [lc(s.get('name')) for s in skills if isinstance(s, dict)]
+    career = career_metrics(ch)
+    yoe_fields = grounded_yoe(p.get('years_of_experience'), career['career_yoe'], ch)
+    assessment = assessment_signals(sig)
+    behavior = behavioral_fields(sig)
+    evidence = evidence_counts(text)
+    prior_india_work_signal = any(ci in career_text for ci in INDIA_CITIES) or 'india' in career_text or any(emp in company_text for emp in INDIA_EMPLOYER_HINTS)
+    return dict(
+        candidate_id=c['candidate_id'],
+        yoe=yoe_fields['yoe'], profile_yoe=yoe_fields['profile_yoe'], career_yoe=career['career_yoe'], span_yoe=yoe_fields['span_yoe'],
+        yoe_gap_span=yoe_fields['yoe_gap_span'], profile_yoe_gt_span=yoe_fields['profile_yoe_gt_span'], inflated_yoe=yoe_fields['inflated_yoe'],
+        current_title=cur_title,
+        current_industry=lc(p.get('current_industry')),
+        country=ctry, location=loc,
+        india=(ctry == 'india') or any(ci in loc for ci in INDIA_CITIES),
+        prior_india_work_signal=prior_india_work_signal,
+        jd_city=any(ci in loc for ci in JD_CITIES),
+        n_jobs=career['n_jobs'], avg_stint_months=career['avg_stint_months'], short_stints=career['short_stints'],
+        career_months=career['career_months'], service_months=career['service_months'], product_months=career['product_months'],
+        service_share=career['service_share'], product_share=career['product_share'],
+        service_only_career=career['service_only_career'],
+        applied_ml_years=career['applied_ml_years'],
+        ir_assess=assessment['ir_assess'],
+        is_ml_title=any(m in cur_title for m in ML_TITLE),
+        is_noneng_title=any(nt in cur_title for nt in NONENG_TITLES),
+        consulting_only=bool(ch) and all(any(cf in lc(j.get('company')) for cf in CONSULTING) for j in ch),
+        in_product_now=lc(p.get('current_industry')) in PRODUCT_INDS,
+        **evidence,
         ai_skill_count=sum(1 for s in sk_names if any(k == s or k in s for k in AI_SKILL_KW)),
         n_skills=len(sk_names),
         edu_tier=(edu[0].get('tier') if edu else None),
-        response_rate=sig.get('recruiter_response_rate'),
-        avg_response_hours=sig.get('avg_response_time_hours'),
-        days_inactive=days_inactive,
-        open_to_work=sig.get('open_to_work_flag'),
-        notice_days=sig.get('notice_period_days'),
-        willing_relocate=sig.get('willing_to_relocate'),
-        interview_completion=sig.get('interview_completion_rate'),
-        offer_acceptance=sig.get('offer_acceptance_rate'),
-        github=sig.get('github_activity_score'),
-        completeness=sig.get('profile_completeness_score'),
-        saved_30d=sig.get('saved_by_recruiters_30d'),
-        assess_avg=(np.mean(ass_values) if ass_values else None),
-        assess_max=(max(ass_values) if ass_values else None),
+        **behavior,
+        assess_avg=assessment['assess_avg'],
+        assess_max=assessment['assess_max'],
     )
 
 
@@ -372,82 +426,146 @@ def honeypot_reasons(c):
 
 
 # ---- structured scoring ----------------------------------------------------------------------
-def _fit(r):
-    yoe = r['yoe'] or 0
-    under_min_yoe = yoe < 4
-    early_career = 4 <= yoe < 4.5
-    early_exceptional = (
+def early_exceptional_fit(r):
+    return bool(
         r['retrieval_evidence'] >= 2 and
         r['prod_evidence'] >= 2 and
         (r['eval_evidence'] >= 1 or r['vector_infra_evidence'] >= 2 or r['ir_assess'] >= 50)
     )
-    profile_yoe_gt_span = bool(r.get('profile_yoe_gt_span', False))
-    consulting_only = bool(r['consulting_only'])
-    cv_speech_without_nlp = bool(r['cv_speech_hits'] >= 2 and not r['nlp_present'])
-    noneng_without_ml = bool(r['is_noneng_title'] and not r['is_ml_title'])
-    research_without_prod = bool(r['research_hits'] >= 3 and r['prod_evidence'] == 0)
 
-    disq = profile_yoe_gt_span or under_min_yoe or (early_career and not early_exceptional) or consulting_only or noneng_without_ml or cv_speech_without_nlp or research_without_prod
 
-    s = 0.0
-    s += (STRUCT_WEIGHTS['yoe_ideal'] if 6 <= yoe <= 8 else STRUCT_WEIGHTS['yoe_target']) if 5 <= yoe <= 9 else (STRUCT_WEIGHTS['yoe_greater_target'] if 9 < yoe <= 11 else (STRUCT_WEIGHTS['yoe_slightly_below_target'] if 4.4 <= yoe < 5 else (STRUCT_WEIGHTS['yoe_below_target'] if 4 <= yoe < 4.4 else STRUCT_WEIGHTS['yoe_far_below_target'])))
-    s += min(r['applied_ml_years'], 5) / 5 * STRUCT_WEIGHTS['applied_ml']
+def disqualification_flags(r, yoe):
+    early_career = 4 <= yoe < 4.5
+    flags = dict(
+        profile_yoe_gt_span=bool(r.get('profile_yoe_gt_span', False)),
+        under_min_yoe=yoe < 4,
+        early_career_not_exceptional=early_career and not early_exceptional_fit(r),
+        consulting_only=bool(r['consulting_only']),
+        noneng_without_ml=bool(r['is_noneng_title'] and not r['is_ml_title']),
+        cv_speech_without_nlp=bool(r['cv_speech_hits'] >= 2 and not r['nlp_present']),
+        research_without_prod=bool(r['research_hits'] >= 3 and r['prod_evidence'] == 0),
+    )
+    return flags
 
-    s += STRUCT_WEIGHTS['python_strong'] if r['python_evidence'] >= 2 else (STRUCT_WEIGHTS['python_some'] if r['python_evidence'] == 1 else 0.0)
-    s += STRUCT_WEIGHTS['ir_assess_strong'] if r['ir_assess'] >= 50 else (STRUCT_WEIGHTS['ir_assess_some'] if r['ir_assess'] > 0 else 0.0)
+
+def yoe_struct_score(yoe):
+    if 5 <= yoe <= 9:
+        return STRUCT_WEIGHTS['yoe_ideal'] if 6 <= yoe <= 8 else STRUCT_WEIGHTS['yoe_target']
+    if 9 < yoe <= 11:
+        return STRUCT_WEIGHTS['yoe_greater_target']
+    if 4.4 <= yoe < 5:
+        return STRUCT_WEIGHTS['yoe_slightly_below_target']
+    if 4 <= yoe < 4.4:
+        return STRUCT_WEIGHTS['yoe_below_target']
+    return STRUCT_WEIGHTS['yoe_far_below_target']
+
+
+def core_skill_score(r):
     retrieval_prod_hits = r['retrieval_evidence'] + r['prod_evidence']
-    s += STRUCT_WEIGHTS['retrieval_prod_strong'] if retrieval_prod_hits >= 3 else (STRUCT_WEIGHTS['retrieval_prod_some'] if retrieval_prod_hits >= 1 else 0.0)
-    s += STRUCT_WEIGHTS['vector_infra_strong'] if r['vector_infra_evidence'] >= 2 else (STRUCT_WEIGHTS['vector_infra_some'] if r['vector_infra_evidence'] == 1 else 0.0)
-    s += STRUCT_WEIGHTS['ranking_eval'] if r['eval_evidence'] >= 1 else 0.0
+    score = 0.0
+    score += STRUCT_WEIGHTS['python_strong'] if r['python_evidence'] >= 2 else (STRUCT_WEIGHTS['python_some'] if r['python_evidence'] == 1 else 0.0)
+    score += STRUCT_WEIGHTS['ir_assess_strong'] if r['ir_assess'] >= 50 else (STRUCT_WEIGHTS['ir_assess_some'] if r['ir_assess'] > 0 else 0.0)
+    score += STRUCT_WEIGHTS['retrieval_prod_strong'] if retrieval_prod_hits >= 3 else (STRUCT_WEIGHTS['retrieval_prod_some'] if retrieval_prod_hits >= 1 else 0.0)
+    score += STRUCT_WEIGHTS['vector_infra_strong'] if r['vector_infra_evidence'] >= 2 else (STRUCT_WEIGHTS['vector_infra_some'] if r['vector_infra_evidence'] == 1 else 0.0)
+    score += STRUCT_WEIGHTS['ranking_eval'] if r['eval_evidence'] >= 1 else 0.0
+    return score
 
-    # Skill-depth bonuses (graded, on top of the strong/flat tiers above) so deeper
-    # demonstrated evidence keeps earning score instead of saturating at the threshold.
-    s += STRUCT_WEIGHTS['retrieval_prod_depth'] * min(max(retrieval_prod_hits - 3, 0), 4)
-    s += STRUCT_WEIGHTS['retrieval_depth'] * min(max(r['retrieval_evidence'] - 2, 0), 4)
-    s += STRUCT_WEIGHTS['vector_infra_depth'] * min(max(r['vector_infra_evidence'] - 2, 0), 3)
-    s += STRUCT_WEIGHTS['ranking_eval_deep'] if r['eval_evidence'] >= 3 else (STRUCT_WEIGHTS['ranking_eval_mid'] if r['eval_evidence'] >= 2 else 0.0)
 
-    s += STRUCT_WEIGHTS['product_context'] if r['in_product_now'] else 0.0
+def skill_depth_score(r):
+    retrieval_prod_hits = r['retrieval_evidence'] + r['prod_evidence']
+    score = 0.0
+    score += STRUCT_WEIGHTS['retrieval_prod_depth'] * min(max(retrieval_prod_hits - 3, 0), 4)
+    score += STRUCT_WEIGHTS['retrieval_depth'] * min(max(r['retrieval_evidence'] - 2, 0), 4)
+    score += STRUCT_WEIGHTS['vector_infra_depth'] * min(max(r['vector_infra_evidence'] - 2, 0), 3)
+    score += STRUCT_WEIGHTS['ranking_eval_deep'] if r['eval_evidence'] >= 3 else (STRUCT_WEIGHTS['ranking_eval_mid'] if r['eval_evidence'] >= 2 else 0.0)
+    return score
+
+
+def product_context_score(r):
+    score = STRUCT_WEIGHTS['product_context'] if r['in_product_now'] else 0.0
     if r['product_months'] > r['service_months'] and r['product_months'] > 0:
-        s += STRUCT_WEIGHTS['product_heavy_career']
+        score += STRUCT_WEIGHTS['product_heavy_career']
     elif r['service_months'] > r['product_months'] and r['product_months'] > 0:
-        s += STRUCT_WEIGHTS['service_heavy_with_product']
+        score += STRUCT_WEIGHTS['service_heavy_with_product']
+    return score
+
+
+def profile_quality_score(r):
     completeness = r['completeness'] if pd.notna(r['completeness']) else None
     if completeness is None:
-        pass
-    elif completeness > 60:
-        s += STRUCT_WEIGHTS['profile_complete_high']
-    elif completeness >= 40:
-        s += STRUCT_WEIGHTS['profile_complete_mid']
-    s += STRUCT_WEIGHTS['ml_title'] if r['is_ml_title'] else 0.0
-    s += min(r['nice_to_have_hits'], int(round(STRUCT_WEIGHTS['nice_cap'] / STRUCT_WEIGHTS['nice_each']))) * STRUCT_WEIGHTS['nice_each']
+        return 0.0
+    if completeness > 60:
+        return STRUCT_WEIGHTS['profile_complete_high']
+    if completeness >= 40:
+        return STRUCT_WEIGHTS['profile_complete_mid']
+    return 0.0
 
+
+def nice_to_have_score(r):
+    nice_cap_count = int(round(STRUCT_WEIGHTS['nice_cap'] / STRUCT_WEIGHTS['nice_each']))
+    return min(r['nice_to_have_hits'], nice_cap_count) * STRUCT_WEIGHTS['nice_each']
+
+
+def location_struct_score(r):
     if r['jd_city']:
-        s += LOCATION_STRUCT_WEIGHTS['jd_city']
-    elif r['india'] and r['willing_relocate']:
-        s += LOCATION_STRUCT_WEIGHTS['india_relocate']
-    elif r['india']:
-        s += LOCATION_STRUCT_WEIGHTS['india']
-    elif r['willing_relocate']:
-        s += LOCATION_STRUCT_WEIGHTS['outside_relocate']
-    else:
-        s += LOCATION_STRUCT_WEIGHTS['outside_no_relocate']
+        return LOCATION_STRUCT_WEIGHTS['jd_city']
+    if r['india'] and r['willing_relocate']:
+        return LOCATION_STRUCT_WEIGHTS['india_relocate']
+    if r['india']:
+        return LOCATION_STRUCT_WEIGHTS['india']
+    if r['willing_relocate']:
+        return LOCATION_STRUCT_WEIGHTS['outside_relocate']
+    return LOCATION_STRUCT_WEIGHTS['outside_no_relocate']
 
-    title_chaser = bool(r['short_stints'] >= 3 and (yoe >= 5 or r['avg_stint_months'] and r['avg_stint_months'] < 24))
-    framework_demo_only = bool(r['framework_demo_hits'] >= 2 and r['retrieval_evidence'] == 0 and r['vector_infra_evidence'] == 0 and r['prod_evidence'] == 0 and r['eval_evidence'] == 0)
-    closed_proprietary_no_validation = bool((r['applied_ml_years'] >= 5 or yoe >= 7) and r['external_validation_hits'] == 0 and (r['github'] or 0) < 30 and r['eval_evidence'] == 0)
-    recent_llm_only = bool(r['llm_recent_hits'] >= 1 and r['applied_ml_years'] < 1 and r['ir_assess'] == 0 and r['ml_evidence'] < 2)
-    cv_primary_weak_ir = bool(any(k in (r['current_title'] or '') for k in CV_TITLE_TERMS) and r['retrieval_evidence'] < 2 and r['ir_assess'] < 50)
 
-    if title_chaser: s += STRUCT_PENALTIES['title_chaser']
-    if framework_demo_only: s += STRUCT_PENALTIES['framework_demo_only']
-    if r['service_only_career']: s += STRUCT_PENALTIES['service_only_career']
-    if consulting_only: s += STRUCT_PENALTIES['consulting_only']
-    if cv_speech_without_nlp: s += STRUCT_PENALTIES['cv_speech_without_nlp']
-    if closed_proprietary_no_validation: s += STRUCT_PENALTIES['closed_proprietary_no_validation']
-    if research_without_prod: s += STRUCT_PENALTIES['research_without_prod']
-    if recent_llm_only: s += STRUCT_PENALTIES['recent_llm_only']
-    if cv_primary_weak_ir: s += STRUCT_PENALTIES['cv_primary_weak_ir']
+def penalty_flags(r, yoe, disq_flags):
+    return dict(
+        title_chaser=bool(r['short_stints'] >= 3 and (yoe >= 5 or r['avg_stint_months'] and r['avg_stint_months'] < 24)),
+        framework_demo_only=bool(r['framework_demo_hits'] >= 2 and r['retrieval_evidence'] == 0 and r['vector_infra_evidence'] == 0 and r['prod_evidence'] == 0 and r['eval_evidence'] == 0),
+        service_only_career=bool(r['service_only_career']),
+        consulting_only=disq_flags['consulting_only'],
+        cv_speech_without_nlp=disq_flags['cv_speech_without_nlp'],
+        closed_proprietary_no_validation=bool((r['applied_ml_years'] >= 5 or yoe >= 7) and r['external_validation_hits'] == 0 and (r['github'] or 0) < 30 and r['eval_evidence'] == 0),
+        research_without_prod=disq_flags['research_without_prod'],
+        recent_llm_only=bool(r['llm_recent_hits'] >= 1 and r['applied_ml_years'] < 1 and r['ir_assess'] == 0 and r['ml_evidence'] < 2),
+        cv_primary_weak_ir=bool(any(k in (r['current_title'] or '') for k in CV_TITLE_TERMS) and r['retrieval_evidence'] < 2 and r['ir_assess'] < 50),
+    )
+
+
+def penalty_score(flags):
+    score = 0.0
+    if flags['title_chaser']: score += STRUCT_PENALTIES['title_chaser']
+    if flags['framework_demo_only']: score += STRUCT_PENALTIES['framework_demo_only']
+    if flags['service_only_career']: score += STRUCT_PENALTIES['service_only_career']
+    if flags['consulting_only']: score += STRUCT_PENALTIES['consulting_only']
+    if flags['cv_speech_without_nlp']: score += STRUCT_PENALTIES['cv_speech_without_nlp']
+    if flags['closed_proprietary_no_validation']: score += STRUCT_PENALTIES['closed_proprietary_no_validation']
+    if flags['research_without_prod']: score += STRUCT_PENALTIES['research_without_prod']
+    if flags['recent_llm_only']: score += STRUCT_PENALTIES['recent_llm_only']
+    if flags['cv_primary_weak_ir']: score += STRUCT_PENALTIES['cv_primary_weak_ir']
+    return score
+
+
+def positive_struct_score(r, yoe):
+    score = 0.0
+    score += yoe_struct_score(yoe)
+    score += min(r['applied_ml_years'], 5) / 5 * STRUCT_WEIGHTS['applied_ml']
+    score += core_skill_score(r)
+    score += skill_depth_score(r)
+    score += product_context_score(r)
+    score += profile_quality_score(r)
+    score += STRUCT_WEIGHTS['ml_title'] if r['is_ml_title'] else 0.0
+    score += nice_to_have_score(r)
+    score += location_struct_score(r)
+    return score
+
+
+def _fit(r):
+    yoe = r['yoe'] or 0
+    disq_flags = disqualification_flags(r, yoe)
+    disq = any(disq_flags.values())
+    s = positive_struct_score(r, yoe)
+    s += penalty_score(penalty_flags(r, yoe, disq_flags))
     return s, disq
 
 
@@ -548,15 +666,16 @@ def location_factor(r):
     if bool(r.get('india')):
         if bool(r.get('jd_city')):
             return 1.00
-        if bool(r.get('willing_relocate')):
-            return 0.80
         loc = r.get('location') or ''
-        if any(city in loc for city in SECONDARY_TIER1_CITIES):
+        in_secondary_tier1 = any(city in loc for city in SECONDARY_TIER1_CITIES)
+        if bool(r.get('willing_relocate')):
+            return 0.80 if in_secondary_tier1 else 0.50
+        if in_secondary_tier1:
             return 0.12
-        return 0.05
+        return -0.50
     if bool(r.get('prior_india_work_signal')) and bool(r.get('willing_relocate')):
         return 0.10
-    return -0.25
+    return -0.50
 
 
 def logistics_multiplier(r):
