@@ -81,14 +81,22 @@ methodology_summary: |
   weights (experience band peaking at 6-8 yrs, production retrieval/vector/eval evidence, verified
   assessment, product-company context, graded location) plus hard disqualifiers (consulting-only,
   CV without NLP, pure research without production, title vs work mismatch) and anti-fit penalties.
-  Semantic fit is bge-small cosine of the JD against each candidate's career prose (not the noisy
-  skill list), which is the decisive signal against keyword stuffer traps. A 6 signal behavioral
-  multiplier down-weights unavailable candidates, while an experience multiplier peaks at the JD's
-  ideal 6-8 year band and keeps 5-9 years as the target range. ~80 honeypots are removed up front
-  via an impossibility battery (skill/tool anachronisms, impossible tenure, company-founded-after
-  dates, expert-skill-with-zero-months); 0 reach the top-100. Final = 0.75*structured +
-  0.25*semantic, scaled by behavioral x logistics x experience, with an assessment-quality
-  refinement over a top-150 shortlist.
+  Skill evidence is scored with DEPTH bonuses on top of the strong/flat tiers so deeper demonstrated
+  retrieval/eval/vector proof keeps earning score instead of saturating - a candidate who has
+  genuinely built more ranking/retrieval systems outranks one who merely clears the bar, so skill
+  depth beats raw tenure at the margin. Semantic fit is bge-small cosine of the JD against each
+  candidate's career prose (not the noisy skill list), which is the decisive signal against keyword
+  stuffer traps. A 6-signal behavioral multiplier down-weights unavailable/passive candidates (low
+  recruiter response, not open to work, long inactivity). Logistics = graded location x notice: the
+  location grade is unchanged (JD city > willing-to-relocate > secondary tier-1 > penalized), and the
+  notice-period grade prefers <=30 days, treats 31-60 days as acceptable (notice buyout is standard
+  in India), and penalizes >60 days UNLESS the candidate is exceptional on skills/struct/semantic
+  fit, in which case the penalty is eased (worth the wait or a buyout). An experience multiplier
+  keeps 5-9 years as the target with a light 6-8 peak but is deliberately NOT the tiebreaker. ~80
+  honeypots are removed up front via an impossibility battery (skill/tool anachronisms, impossible
+  tenure, company-founded-after dates, expert-skill-with-zero-months); 0 reach the top-100.
+  base = (0.75*structured + 0.25*semantic) x behavioral x logistics x experience; the final score
+  over a top-150 shortlist is 0.85*normalized(base) + 0.15*assessment-quality refinement.
 
 # ============================================================================
 # Declarations

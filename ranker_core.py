@@ -515,15 +515,33 @@ def build_feature_frame(candidates):
 
 
 # ---- logistics + hybrid blend ----------------------------------------------------------------
-def notice_factor(days):
+def notice_factor(days, exceptional=False):
+    """Availability by notice period.
+      <=30d  : preferred.
+      31-60d : acceptable - notice buyout is standard practice in India, so a normal
+               1-2 month notice is not a real blocker.
+      >60d   : penalized, UNLESS the candidate is exceptional on skills/struct/sem, in
+               which case they're worth the wait or a buyout and the penalty is eased.
+    """
     if pd.isna(days):
         return 0.40
     d = float(days)
-    if d <= 15: return 1.00
-    if d <= 30: return 0.70
-    if d <= 60: return 0.40
-    if d < 90: return 0.10
-    return 0.00
+    if d <= 30: return 1.00          # preferred
+    if d <= 60: return 0.72          # acceptable (buyout generally feasible) - clear step below <=30
+    if d <= 90: return 0.55 if exceptional else 0.25
+    return 0.30 if exceptional else 0.10
+
+
+def is_exceptional_candidate(r):
+    """Worth a long-notice buyout: a LOT better on raw skills, OR extraordinary across
+    skills AND structured fit AND semantic fit together."""
+    skill_raw = ((r.get('retrieval_evidence') or 0) + (r.get('prod_evidence') or 0)
+                 + (r.get('vector_infra_evidence') or 0) + (r.get('eval_evidence') or 0))
+    a_lot_better_skills = skill_raw >= 9
+    extraordinary_all = ((r.get('struct_norm') or 0) >= 0.92
+                         and (r.get('sem_norm') or 0) >= 0.92
+                         and skill_raw >= 6)
+    return bool(a_lot_better_skills or extraordinary_all)
 
 
 def location_factor(r):
@@ -542,7 +560,7 @@ def location_factor(r):
 
 
 def logistics_multiplier(r):
-    return round(location_factor(r) * notice_factor(r.get('notice_days')), 3)
+    return round(location_factor(r) * notice_factor(r.get('notice_days'), is_exceptional_candidate(r)), 3)
 
 
 def assessment_refine(score):
