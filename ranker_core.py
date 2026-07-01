@@ -87,6 +87,15 @@ STRUCT_WEIGHTS = {
     'vector_infra_strong': 1.5,
     'vector_infra_some': 0.8,
     'ranking_eval': 1.5,
+    # ---- skill-DEPTH bonuses: reward evidence ABOVE the strong/flat thresholds so a
+    # candidate with deep retrieval/eval/vector proof outranks one who merely clears the
+    # bar. Without these the "strong" tiers saturate (retrieval=5 == retrieval=2), which
+    # let ideal-tenure but shallow-skill candidates edge out stronger, slightly-younger ones.
+    'retrieval_prod_depth': 0.30,   # per hit of (retrieval+prod) beyond the >=3 "strong" cap (cap +4)
+    'retrieval_depth': 0.25,        # per pure-retrieval hit beyond 2 (cap +4)
+    'vector_infra_depth': 0.30,     # per vector-infra hit beyond the >=2 "strong" cap (cap +3)
+    'ranking_eval_deep': 1.0,       # eval_evidence >= 3 (beyond the flat >=1 credit)
+    'ranking_eval_mid': 0.5,        # eval_evidence == 2
     'product_context': 0.4,
     'product_heavy_career': 0.5,
     'service_heavy_with_product': 0.25,
@@ -391,6 +400,13 @@ def _fit(r):
     s += STRUCT_WEIGHTS['vector_infra_strong'] if r['vector_infra_evidence'] >= 2 else (STRUCT_WEIGHTS['vector_infra_some'] if r['vector_infra_evidence'] == 1 else 0.0)
     s += STRUCT_WEIGHTS['ranking_eval'] if r['eval_evidence'] >= 1 else 0.0
 
+    # Skill-depth bonuses (graded, on top of the strong/flat tiers above) so deeper
+    # demonstrated evidence keeps earning score instead of saturating at the threshold.
+    s += STRUCT_WEIGHTS['retrieval_prod_depth'] * min(max(retrieval_prod_hits - 3, 0), 4)
+    s += STRUCT_WEIGHTS['retrieval_depth'] * min(max(r['retrieval_evidence'] - 2, 0), 4)
+    s += STRUCT_WEIGHTS['vector_infra_depth'] * min(max(r['vector_infra_evidence'] - 2, 0), 3)
+    s += STRUCT_WEIGHTS['ranking_eval_deep'] if r['eval_evidence'] >= 3 else (STRUCT_WEIGHTS['ranking_eval_mid'] if r['eval_evidence'] >= 2 else 0.0)
+
     s += STRUCT_WEIGHTS['product_context'] if r['in_product_now'] else 0.0
     if r['product_months'] > r['service_months'] and r['product_months'] > 0:
         s += STRUCT_WEIGHTS['product_heavy_career']
@@ -616,7 +632,7 @@ def rank(feat, cand_emb, cand_ids, jd_emb):
     shortlist = R.sort_values(['base_final', 'candidate_id'], ascending=[False, True]).head(150).copy()
     base_lo, base_hi = shortlist['base_final'].min(), shortlist['base_final'].max()
     shortlist['base_norm_150'] = ((shortlist['base_final'] - base_lo) / (base_hi - base_lo)).clip(0, 1) if base_hi > base_lo else 1.0
-    shortlist['final'] = 0.95 * shortlist['base_norm_150'] + 0.05 * shortlist['assessment_refine']
+    shortlist['final'] = 0.85 * shortlist['base_norm_150'] + 0.15 * shortlist['assessment_refine']
 
     top = shortlist.sort_values(['final', 'base_final', 'candidate_id'], ascending=[False, False, True]).head(100)
     return top
