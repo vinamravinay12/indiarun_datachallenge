@@ -153,10 +153,12 @@ COMPANY_AGE_JD_TERMS = [
 
 # ---- helpers ---------------------------------------------------------------------------------
 def lc(s):
+    """Lowercase a string, treating None as empty (safe for missing fields)."""
     return (s or '').lower()
 
 
 def parse_date(s):
+    """Parse an ISO date string, returning None on any malformed/missing value."""
     try:
         return dt.date.fromisoformat(s)
     except Exception:
@@ -164,14 +166,17 @@ def parse_date(s):
 
 
 def tokens(text):
+    """Tokenize text into a set of words (whole-word matching, no substring false-positives)."""
     return set(TOKEN_RE.findall(text))
 
 
 def tool_present(tool, toks):
+    """True if every word of a (possibly multi-word) tool name is present in the token set."""
     return all(pt in toks for pt in tool.split())
 
 
 def count_hits(text, phrases):
+    """Count how many of the given phrases occur as substrings in text."""
     return sum(1 for ph in phrases if ph in text)
 
 
@@ -305,6 +310,8 @@ def evidence_counts(text):
 
 
 def extract_row(c):
+    """Build the full flat feature row for one candidate: grounded YOE, location/India flags,
+    career mix, evidence phrase-counts, assessment + behavioral signals - the input to scoring."""
     p = c.get('profile', {}) or {}
     ch = c.get('career_history', []) or []
     sig = c.get('redrob_signals', {}) or {}
@@ -352,6 +359,8 @@ def extract_row(c):
 
 # ---- honeypot impossibility battery ----------------------------------------------------------
 def company_age_trap(c, job):
+    """Honeypot check: flag a job that starts before its company was founded, but only when
+    paired with a suspiciously JD-tailored senior profile (avoids false positives on real gaps)."""
     co = lc(job.get('company'))
     founded = COMPANY_FOUNDED_AFTER.get(co)
     start = parse_date(job.get('start_date'))
@@ -372,6 +381,8 @@ def company_age_trap(c, job):
 
 
 def exp_claim_anachronism(text):
+    """Honeypot check: flag an experience claim ("N years of X") that exceeds the age of the
+    named tool X (e.g. more years with a tool than the tool has existed)."""
     for m in YEARS_RE.finditer(text):
         n = float(m.group(1)); ctx = tokens(text[max(0, m.start() - 60):m.end() + 60])
         for tool, birth in TOOL_BIRTH_EXT.items():
@@ -381,6 +392,10 @@ def exp_claim_anachronism(text):
 
 
 def honeypot_reasons(c):
+    """Run the full impossibility battery over a candidate and return sorted reason codes
+    (two current jobs, future/duration-mismatched dates, tool anachronisms, company-before-
+    founding, job/tenure exceeding total YOE, overlapping jobs, expert-skill-with-0-months).
+    A non-empty result marks a deliberately planted profile that is dropped before ranking."""
     r = []
     p = c.get('profile', {}) or {}; ch = c.get('career_history', []) or []
     y = p.get('years_of_experience') or 0
@@ -427,6 +442,8 @@ def honeypot_reasons(c):
 
 # ---- structured scoring ----------------------------------------------------------------------
 def early_exceptional_fit(r):
+    """True if a sub-4.5yr candidate shows strong enough retrieval+production (+eval/vector/IR)
+    evidence to be exempted from the early-career disqualifier."""
     return bool(
         r['retrieval_evidence'] >= 2 and
         r['prod_evidence'] >= 2 and
@@ -435,6 +452,9 @@ def early_exceptional_fit(r):
 
 
 def disqualification_flags(r, yoe):
+    """Hard anti-fit disqualifiers - if any is True the candidate drops to tier 0: inflated YOE,
+    under-min experience, non-exceptional early-career, consulting-only, non-eng title without ML,
+    CV/speech without NLP, pure research without production."""
     early_career = 4 <= yoe < 4.5
     flags = dict(
         profile_yoe_gt_span=bool(r.get('profile_yoe_gt_span', False)),
@@ -449,6 +469,8 @@ def disqualification_flags(r, yoe):
 
 
 def yoe_struct_score(yoe):
+    """Experience-band points for the structured score, peaking at the JD's ideal 6-8yr band
+    (a LIGHT feature; the main seniority guardrail lives in experience_factor)."""
     if 5 <= yoe <= 9:
         return STRUCT_WEIGHTS['yoe_ideal'] if 6 <= yoe <= 8 else STRUCT_WEIGHTS['yoe_target']
     if 9 < yoe <= 11:
@@ -461,6 +483,8 @@ def yoe_struct_score(yoe):
 
 
 def core_skill_score(r):
+    """Threshold points for the core JD skills: Python, verified IR assessment, retrieval+
+    production evidence, vector infra, and ranking evaluation (strong vs some vs none tiers)."""
     retrieval_prod_hits = r['retrieval_evidence'] + r['prod_evidence']
     score = 0.0
     score += STRUCT_WEIGHTS['python_strong'] if r['python_evidence'] >= 2 else (STRUCT_WEIGHTS['python_some'] if r['python_evidence'] == 1 else 0.0)
@@ -472,6 +496,8 @@ def core_skill_score(r):
 
 
 def skill_depth_score(r):
+    """Graded bonuses for evidence ABOVE the core-skill strong/flat thresholds, so deeper
+    demonstrated retrieval/eval/vector proof keeps earning score (skill depth over raw tenure)."""
     retrieval_prod_hits = r['retrieval_evidence'] + r['prod_evidence']
     score = 0.0
     score += STRUCT_WEIGHTS['retrieval_prod_depth'] * min(max(retrieval_prod_hits - 3, 0), 4)
@@ -482,6 +508,8 @@ def skill_depth_score(r):
 
 
 def product_context_score(r):
+    """Points for product-company context: current employer in a product industry, plus whether
+    the career is product-heavy vs service-heavy (the JD prefers product over pure services)."""
     score = STRUCT_WEIGHTS['product_context'] if r['in_product_now'] else 0.0
     if r['product_months'] > r['service_months'] and r['product_months'] > 0:
         score += STRUCT_WEIGHTS['product_heavy_career']
@@ -491,6 +519,7 @@ def product_context_score(r):
 
 
 def profile_quality_score(r):
+    """Small points for profile completeness (high/mid bands); neutral when the signal is missing."""
     completeness = r['completeness'] if pd.notna(r['completeness']) else None
     if completeness is None:
         return 0.0
@@ -502,11 +531,14 @@ def profile_quality_score(r):
 
 
 def nice_to_have_score(r):
+    """Capped points for nice-to-have skill hits (LoRA, learning-to-rank, distributed systems, ...)."""
     nice_cap_count = int(round(STRUCT_WEIGHTS['nice_cap'] / STRUCT_WEIGHTS['nice_each']))
     return min(r['nice_to_have_hits'], nice_cap_count) * STRUCT_WEIGHTS['nice_each']
 
 
 def location_struct_score(r):
+    """Graded location points inside the structured score (JD-city > India-relocate > India >
+    outside-relocate > outside-no-relocate). Complements the location_factor availability multiplier."""
     if r['jd_city']:
         return LOCATION_STRUCT_WEIGHTS['jd_city']
     if r['india'] and r['willing_relocate']:
@@ -519,6 +551,8 @@ def location_struct_score(r):
 
 
 def penalty_flags(r, yoe, disq_flags):
+    """Soft anti-fit penalty flags (title-chaser, framework-demo-only, service/consulting-only,
+    closed-source-no-validation, recent-LLM-only, CV-primary-with-weak-IR). Each subtracts weight."""
     return dict(
         title_chaser=bool(r['short_stints'] >= 3 and (yoe >= 5 or r['avg_stint_months'] and r['avg_stint_months'] < 24)),
         framework_demo_only=bool(r['framework_demo_hits'] >= 2 and r['retrieval_evidence'] == 0 and r['vector_infra_evidence'] == 0 and r['prod_evidence'] == 0 and r['eval_evidence'] == 0),
@@ -533,6 +567,7 @@ def penalty_flags(r, yoe, disq_flags):
 
 
 def penalty_score(flags):
+    """Sum the (negative) penalty weights for whichever penalty flags fired."""
     score = 0.0
     if flags['title_chaser']: score += STRUCT_PENALTIES['title_chaser']
     if flags['framework_demo_only']: score += STRUCT_PENALTIES['framework_demo_only']
@@ -547,6 +582,8 @@ def penalty_score(flags):
 
 
 def positive_struct_score(r, yoe):
+    """Sum all positive structured components: experience band, applied-ML years, core skills,
+    skill depth, product context, profile quality, ML title, nice-to-haves, and location."""
     score = 0.0
     score += yoe_struct_score(yoe)
     score += min(r['applied_ml_years'], 5) / 5 * STRUCT_WEIGHTS['applied_ml']
@@ -561,6 +598,8 @@ def positive_struct_score(r, yoe):
 
 
 def _fit(r):
+    """Compute the raw structured score (positive components minus penalties) and the hard-
+    disqualified flag for one candidate. Shared by struct_score() and tier()."""
     yoe = r['yoe'] or 0
     disq_flags = disqualification_flags(r, yoe)
     disq = any(disq_flags.values())
@@ -570,6 +609,8 @@ def _fit(r):
 
 
 def tier(r):
+    """Bucket a candidate by structured fit: -1 honeypot, 0 disqualified, else 1-5 by score
+    thresholds. Only tier 5 (the strongest pool) feeds the hybrid ranking."""
     if r['honeypot']:
         return -1
     s, disq = _fit(r)
@@ -583,6 +624,8 @@ def tier(r):
 
 
 def struct_score(r):
+    """The structured JD-fit score used by the hybrid blend: the raw fit clamped to >= 0, or
+    0.0 for honeypots and hard-disqualified candidates."""
     if r['honeypot']:
         return 0.0
     s, disq = _fit(r)
@@ -663,26 +706,36 @@ def is_exceptional_candidate(r):
 
 
 def location_factor(r):
+    """Graded location fit. JD-city (Pune/Noida/Delhi NCR) is preferred; any India-based
+    candidate willing to relocate gets strong credit; secondary tier-1 (Mumbai/Hyderabad/
+    Bangalore) who won't relocate get partial credit; other non-relocating India candidates
+    and non-India candidates (no sponsorship) are down-weighted."""
     if bool(r.get('india')):
         if bool(r.get('jd_city')):
             return 1.00
         loc = r.get('location') or ''
         in_secondary_tier1 = any(city in loc for city in SECONDARY_TIER1_CITIES)
         if bool(r.get('willing_relocate')):
-            return 0.80 if in_secondary_tier1 else 0.50
+            # A relocation-willing candidate already in a tier-1 hub is a stronger bet than one
+            # in a smaller city, so tier-1 relocators get full credit and others a little less.
+            return 0.80 if in_secondary_tier1 else 0.65
         if in_secondary_tier1:
             return 0.12
-        return -0.50
+        return 0.05
     if bool(r.get('prior_india_work_signal')) and bool(r.get('willing_relocate')):
         return 0.10
-    return -0.50
+    return -0.25
 
 
 def logistics_multiplier(r):
+    """Availability multiplier = location_factor x notice_factor (with a notice easing for
+    exceptional candidates). Applied on top of fit x behavioral in the base score."""
     return round(location_factor(r) * notice_factor(r.get('notice_days'), is_exceptional_candidate(r)), 3)
 
 
 def assessment_refine(score):
+    """Verified-assessment refinement term (0..0.30) that forms the 15% assessment component of
+    the final blend; graded by assessment score band, 0 when missing."""
     if pd.isna(score):
         return 0.0
     s = float(score)
@@ -777,6 +830,8 @@ def rank(feat, cand_emb, cand_ids, jd_emb):
 
 # ---- reasoning + submission rows -------------------------------------------------------------
 def evidence_terms(rec):
+    """Extract up to 5 human-readable JD-relevant evidence phrases (retrieval/ranking/vector/
+    eval terms) from a candidate's prose, for use in the generated reasoning string."""
     text = ' '.join([
         rec.get('profile', {}).get('summary', ''),
         ' '.join((j.get('title', '') + ' ' + j.get('description', '')) for j in rec.get('career_history', []))
