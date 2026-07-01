@@ -718,7 +718,11 @@ def location_factor(r):
         if bool(r.get('willing_relocate')):
             # A relocation-willing candidate already in a tier-1 hub is a stronger bet than one
             # in a smaller city, so tier-1 relocators get full credit and others a little less.
-            return 0.80 if in_secondary_tier1 else 0.65
+            # Exception: an exceptional candidate (elite skills/struct/sem) is worth relocating
+            # regardless of current city, so they get the same full credit as a tier-1 relocator.
+            if in_secondary_tier1 or is_exceptional_candidate(r):
+                return 0.80
+            return 0.65
         if in_secondary_tier1:
             return 0.12
         return 0.05
