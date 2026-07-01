@@ -820,7 +820,13 @@ def rank(feat, cand_emb, cand_ids, jd_emb):
     R['experience_mult'] = R['yoe'].apply(experience_factor)
 
     R['fit'] = 0.75 * R['struct_norm'] + 0.25 * R['sem_norm']
-    R['base_final'] = R['fit'] * R['behavioral'] * R['logistics'] * R['early_band_mult'] * R['experience_mult']
+    # Fit (skills + semantic JD match) enters super-linearly so that at the top of the list
+    # skill DOMINATES the availability modifiers: a better-skilled candidate with okay
+    # availability outranks a weaker-skilled one with great availability. Availability still
+    # modulates (behavioral/logistics multipliers), and "too bad" availability (60+ notice or
+    # not-willing-and-not-local) is already down-weighted there, so it can't ride skill to the top.
+    FIT_EXPONENT = 1.5
+    R['base_final'] = (R['fit'] ** FIT_EXPONENT) * R['behavioral'] * R['logistics'] * R['early_band_mult'] * R['experience_mult']
     R['assessment_refine'] = R['assess_eff'].apply(assessment_refine)
 
     shortlist = R.sort_values(['base_final', 'candidate_id'], ascending=[False, True]).head(150).copy()
