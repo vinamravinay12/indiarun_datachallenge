@@ -88,7 +88,7 @@ reasoning timestamps are deterministic across re-runs.
 
 ```mermaid
 flowchart TD
-    A["Hackathon bundle<br/>candidates.jsonl + JD + signal docs"] --> B["Design / audit notebooks<br/>explore.ipynb + ranker.ipynb"]
+    A["Input data + role spec<br/>candidates.jsonl + JD + signal docs"] --> B["Design / audit notebooks<br/>explore.ipynb + ranker.ipynb"]
     B --> C["ranker_core.py<br/>single source of scoring logic"]
 
     A --> D["precompute.py<br/>offline semantic embedding build"]
@@ -131,17 +131,21 @@ If the cached embedding artifacts are already present (`artifacts/cand_emb_256.n
 `cand_ids.json`, `jd_emb_256.npy`), **skip `precompute.py`** - `rank.py` recomputes every structured
 / behavioral / blend score live and only loads the embeddings.
 
-### Compute-constraint compliance (spec Section 3)
+### Compute-constraint compliance - the ranking step (spec Section 3)
 
-| Constraint | Limit | This solution |
+These constraints apply to the **ranking step** (`rank.py`), which is what produces the CSV. The
+one-time offline `precompute.py` is exempt: the spec permits it to use a GPU and exceed 5 minutes.
+
+| Constraint | Limit | This solution (`rank.py`) |
 |---|---|---|
-| Ranking runtime | <= 5 min | **~34 s** (`rank.py`) |
+| Ranking runtime | <= 5 min | **~34 s** |
 | Memory | <= 16 GB | well under |
-| Compute | CPU only | `rank.py` is CPU-only (embeddings precomputed) |
-| Network | off | `rank.py` makes no network/API calls |
+| Compute | CPU only | uses no model/GPU (pure numpy dot-product). `precompute.py` auto-uses MPS/GPU if present, else CPU (exempt) |
+| Network | off | no network/API calls (`precompute.py` downloads the model once, offline) |
 
-Only embedding *pre-computation* uses a model/GPU and may exceed 5 min - explicitly permitted by the
-spec. The ranking step that emits the CSV is pure CPU feature-extraction + a dot-product blend.
+`rank.py` imports only `numpy` + `pandas` and loads cached embedding arrays; it never touches a
+model or the network. Only the offline `precompute.py` uses `sentence-transformers`/`torch` and a
+GPU/MPS, which the spec explicitly permits.
 
 ## Dependencies
 
