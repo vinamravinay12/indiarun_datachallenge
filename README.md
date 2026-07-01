@@ -84,6 +84,34 @@ methodology record - how the features, weights, honeypot checks, and audits were
 notebooks produce the **same top-100 ranking** as `rank.py`; `rank.py` pins a reference date so the
 reasoning timestamps are deterministic across re-runs.
 
+## System architecture
+
+```mermaid
+flowchart TD
+    A["Hackathon bundle<br/>candidates.jsonl + JD + signal docs"] --> B["Design / audit notebooks<br/>explore.ipynb + ranker.ipynb"]
+    B --> C["ranker_core.py<br/>single source of scoring logic"]
+
+    A --> D["precompute.py<br/>offline semantic embedding build"]
+    D --> E["Cached artifacts<br/>cand_emb_256.npy<br/>cand_ids.json<br/>jd_emb_256.npy"]
+
+    A --> F["rank.py<br/>constrained ranking step<br/>CPU-only, no network, <=5 min"]
+    C --> F
+    E --> F
+
+    F --> G["Feature extraction<br/>career evidence, YOE grounding,<br/>location, notice, Redrob signals"]
+    G --> H["Honeypot + disqualifier filter<br/>impossible profiles removed"]
+    H --> I["Structured JD fit<br/>retrieval/recsys/search, Python,<br/>eval, product context, seniority"]
+    H --> J["Semantic fit<br/>JD embedding x career-prose embedding"]
+    H --> K["Behavioral + logistics multipliers<br/>availability, India/relocation, notice"]
+
+    I --> L["Hybrid ranker<br/>fit = 0.75*struct_norm + 0.25*sem_norm"]
+    J --> L
+    K --> L
+    L --> M["Top-150 shortlist<br/>base_final ranking"]
+    M --> N["Assessment refinement<br/>small verified-skill boost"]
+    N --> O["Top-100 output<br/>submission.csv + reasoning"]
+```
+
 ## Reproduce the submission
 
 The 487 MB candidate pool is supplied separately; symlink or copy it to `data/candidates.jsonl`

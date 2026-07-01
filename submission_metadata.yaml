@@ -29,8 +29,20 @@ sandbox_link: "https://colab.research.google.com/github/vinamravinay12/indiarun_
 # This is a Colab notebook (sandbox/sandbox_demo.ipynb) that runs the pipeline on a sample.
 
 reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
-# Ranking step: CPU-only, no network, ~34s. Embeddings are precomputed once via:
-#   python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts
+# The single command that produces submission.csv (spec Section 10.3). CPU-only, no network, ~34s.
+
+# --- Pre-computation (documented per spec Section 10.3) -------------------------------------
+precompute_required: true
+precompute_command: "python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts"
+precompute_note: |
+  This system uses ONE offline pre-computation step. precompute.py encodes each candidate's
+  career prose and the JD with bge-small-en-v1.5 into cached embeddings
+  (artifacts/cand_emb_256.npy, cand_ids.json, jd_emb_256.npy).
+  Pre-computation runs once, may use a GPU/MPS, and may exceed the 5-minute window - this is
+  explicitly permitted by the spec.
+  The ranking step that produces the CSV (rank.py) then only LOADS these arrays and runs a
+  dot-product blend: it completes in ~34s on CPU with no network, well within the 5-minute
+  budget. On a fresh clone, run precompute.py once, then rank.py.
 
 # ============================================================================
 # Compute environment
