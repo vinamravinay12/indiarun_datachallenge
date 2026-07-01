@@ -15,6 +15,30 @@ base_final = fit · behavioral · logistics · experience_mult · early_band_mul
 final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 → top-100
 ```
 
+- `struct_norm` — normalized structured JD-fit score from `ranker_core.struct_score`: experience,
+  applied ML tenure, Python evidence, production retrieval/recsys/search evidence, vector/hybrid
+  infrastructure, ranking evaluation, product-company context, location, and anti-fit penalties.
+- `sem_norm` — normalized cosine similarity between the JD query embedding and the candidate's
+  career prose embedding. This catches candidates who built matching/recommendation/search systems
+  without using the exact JD keywords.
+- `fit` — blended quality score before availability/logistics. Structured evidence gets 75% weight
+  so keyword/embedding similarity cannot overpower actual career evidence.
+- `behavioral` — availability multiplier from Redrob signals: recruiter response rate, recency,
+  interview completion, response speed, open-to-work, and offer acceptance.
+- `logistics` — India/location/relocation/notice-period multiplier. India-based preferred-location
+  candidates with short notice are favored; non-India candidates are heavily suppressed because the
+  JD has no sponsorship.
+- `experience_mult` — JD experience preference: peaks at 6-8 years, keeps 5-9 years strong, and
+  allows exceptional 4-5 year candidates without letting them dominate.
+- `early_band_mult` — extra safeguard for 4.0-4.5 year candidates; they need strong retrieval/prod
+  evidence and verified assessment strength to remain competitive.
+- `base_final` — main ranking score used to pick a top-150 shortlist after fit, behavioral,
+  logistics, and experience constraints are applied.
+- `assessment_refine` — small second-stage boost from verified skill assessments. It only moves
+  candidates within the top-150 shortlist and cannot rescue weak JD-fit profiles.
+- `final` — published score used for the top-100 CSV: mostly normalized `base_final`, with a 5%
+  assessment refinement.
+
 - **Structured fit** (`struct_score`) — explicit JD-derived weights: experience band (peaks at the
   JD's ideal 6–8 yrs), applied-ML years, strong-Python evidence, verified Redrob IR assessment,
   production-retrieval / vector-infra / ranking-evaluation prose, ML title, product-company context,
@@ -34,6 +58,16 @@ final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 
   contradictions = deliberate plants and are dropped before ranking (0 of ~80 reach the top-100).
 
 ## Repo layout
+
+### Canonical files
+
+- `rank.py` is the **canonical reproduction entrypoint**. Reviewers should run this to generate the
+  final CSV under the 5-minute CPU/no-network constraint.
+- `ranker_core.py` is the **canonical scoring implementation**. All production ranking constants,
+  feature extraction, honeypot checks, behavioral/logistics scoring, and reasoning generation live
+  here.
+- `notebooks/` is the **canonical design record**. The notebooks explain how the features, weights,
+  honeypot checks, and audits were developed, but they are not the Stage-3 reproduction entrypoint.
 
 | Path | What |
 |------|------|
