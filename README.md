@@ -77,10 +77,12 @@ final      = 0.95 · base_norm(top-150) + 0.05 · assessment_refine   # top-150 
 | `requirements.txt` | Pinned dependencies |
 | `notebooks/explore.ipynb` | **Design record** — feature extraction, honeypot analysis, structured scoring, diagnostics |
 | `notebooks/ranker.ipynb` | **Design record** — semantic encode, hybrid blend, top-100 audit |
-| `artifacts/` | Cached embeddings + generated outputs (git-ignored; embeddings shipped via Git LFS) |
+| `artifacts/` | Cached embeddings + generated outputs (git-ignored; regenerate embeddings with `precompute.py`) |
 
-`rank.py` is authoritative for reproduction; the notebooks are the exploration/methodology record and
-are kept in sync (`rank.py` reproduces the notebook `submission.csv` byte-for-byte).
+`rank.py` / `ranker_core.py` are authoritative for reproduction; the notebooks are the exploration and
+methodology record — how the features, weights, honeypot checks, and audits were developed. The
+notebooks produce the **same top-100 ranking** as `rank.py`; `rank.py` pins a reference date so the
+reasoning timestamps are deterministic across re-runs.
 
 ## Reproduce the submission
 

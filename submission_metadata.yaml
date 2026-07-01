@@ -5,18 +5,18 @@
 # ============================================================================
 # Team identity
 # ============================================================================
-team_name: "TODO-your-registered-participant-id"   # must match your portal/participant ID
+team_name: "LaunchLLoopDdev" 
 
 primary_contact:
   name: "Vinamra Vinay"
   email: "vinamravinay235@gmail.com"
-  phone: "TODO-+91-XXXXXXXXXX"
+  phone: "+917337697681"
 
 team_members:
   - name: "Vinamra Vinay"
     email: "vinamravinay235@gmail.com"
     role: "ML Engineer"
-  # add more members if applicable; solo participants list just one
+  
 
 # ============================================================================
 # Code and reproducibility
@@ -29,7 +29,7 @@ sandbox_link: "https://colab.research.google.com/github/vinamravinay12/indiarun_
 
 reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
 # Ranking step: CPU-only, no network, ~34s. Embeddings are precomputed once via:
-#   python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts
+  "python precompute.py --candidates ./data/candidates.jsonl --artifacts ./artifacts"
 
 # ============================================================================
 # Compute environment
@@ -55,8 +55,8 @@ ai_tools_used:
 ai_usage_summary: |
   Claude (Claude Code) was used as a pair-engineer for architecture discussion, scoring design,
   honeypot-detection strategy, and turning the notebooks into the reproducible rank.py pipeline.
-  OpenAI Codex CLI was used for some weight tuning and adversarial candidate spot-checks. All design
-  decisions, thresholds, and trade-offs were reviewed and chosen by the author; no candidate data was
+  OpenAI Codex CLI was used for some weight tuning and adversarial candidate spot checks. All design
+  decisions, thresholds, and trade offs were reviewed and chosen by the author; no candidate data was
   sent to any hosted LLM during the ranking step (it runs offline on CPU).
 
 # ============================================================================
@@ -67,9 +67,9 @@ methodology_summary: |
   behavioral/logistics signals modulate availability. Structured scoring uses explicit JD-derived
   weights (experience band peaking at 6-8 yrs, production retrieval/vector/eval evidence, verified
   assessment, product-company context, graded location) plus hard disqualifiers (consulting-only,
-  CV-without-NLP, pure-research-without-production, title-vs-work mismatch) and anti-fit penalties.
+  CV without NLP, pure research without production, title vs work mismatch) and anti-fit penalties.
   Semantic fit is bge-small cosine of the JD against each candidate's career prose (not the noisy
-  skill list), which is the decisive signal against keyword-stuffer traps. A 6-signal behavioral
+  skill list), which is the decisive signal against keyword stuffer traps. A 6 signal behavioral
   multiplier down-weights unavailable candidates, while an experience multiplier peaks at the JD's
   ideal 6-8 year band and keeps 5-9 years as the target range. ~80 honeypots are removed up front
   via an impossibility battery (skill/tool anachronisms, impossible tenure, company-founded-after
