@@ -43,8 +43,9 @@ TOKEN_RE = re.compile("[a-z0-9.+#-]+")  # word tokenizer (no substring false-pos
 
 # ---- domain constants derived from the JD ----------------------------------------------------
 INDIA_CITIES = {'bangalore','bengaluru','pune','noida','hyderabad','mumbai','delhi','gurgaon','gurugram','chennai','kolkata','ncr','new delhi'}
-JD_CITIES = {'pune','noida','hyderabad','mumbai','delhi','gurgaon','gurugram','ncr','new delhi','bangalore','bengaluru'}
-CONSULTING = {'tcs','tata consultancy','infosys','wipro','accenture','cognizant','capgemini','hcl','tech mahindra','ltimindtree','mindtree','mphasis','dxc'}
+JD_CITIES = {'pune','noida','delhi','gurgaon','gurugram','ncr','new delhi'}
+SECONDARY_TIER1_CITIES = {'mumbai','hyderabad','bangalore','bengaluru'}
+CONSULTING = {'tcs','tata consultancy','infosys','wipro','accenture','cognizant','capgemini','hcl','tech mahindra','ltimindtree','mindtree','mphasis','dxc', 'larsen toubro','l&t infotech','larsen & toubro','l&t technology services','l&t technology','l&t','larsen and toubro','larsen and toubro infotech','larsen & toubro infotech','larsen & toubro technology services','larsen & toubro technology','capco','ibm consulting','ibm global business services','ibm gbs','hexaware', 'nagarro', 'persistent systems','persistent','ust global','ust','zensar','zensar technologies','zifo'}
 INDIA_EMPLOYER_HINTS = CONSULTING | {'flipkart','swiggy','zomato','ola','paytm','razorpay','phonepe','freshworks','zoho','meesho','myntra','zerodha','groww','delhivery','makemytrip','inmobi','jio','reliance','hdfc','icici','axis bank','redrob','sarvam','krutrim'}
 SERVICE_INDS = {'it services','consulting','management consulting','outsourcing','staffing','bpo','business process outsourcing','professional services'}
 PRODUCT_INDS = {'software','fintech','e-commerce','saas','ai/ml','food delivery','edtech','adtech','transportation','insurance tech'}
@@ -514,8 +515,11 @@ def location_factor(r):
         if bool(r.get('jd_city')):
             return 1.00
         if bool(r.get('willing_relocate')):
-            return 0.94
-        return 0.78
+            return 0.80
+        loc = r.get('location') or ''
+        if any(city in loc for city in SECONDARY_TIER1_CITIES):
+            return 0.12
+        return 0.05
     if bool(r.get('prior_india_work_signal')) and bool(r.get('willing_relocate')):
         return 0.10
     return -0.25

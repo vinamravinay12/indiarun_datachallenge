@@ -25,9 +25,11 @@ final      = 0.95 * base_norm(top-150) + 0.05 * assessment_refine   # top-150 ->
   so keyword/embedding similarity cannot overpower actual career evidence.
 - `behavioral` - availability multiplier from Redrob signals: recruiter response rate, recency,
   interview completion, response speed, open-to-work, and offer acceptance.
-- `logistics` - India/location/relocation/notice-period multiplier. India-based preferred-location
-  candidates with short notice are favored; non-India candidates are heavily suppressed because the
-  JD has no sponsorship.
+- `logistics` - India/location/relocation/notice-period multiplier. Delhi NCR/Pune candidates with
+  short notice are favored. Mumbai/Bangalore/Hyderabad candidates get near-preferred treatment only
+  if willing to relocate; other Indian relocators receive partial credit, while non-relocating
+  non-preferred candidates are heavily down-weighted. Non-India candidates are heavily suppressed
+  because the JD has no sponsorship.
 - `experience_mult` - JD experience preference: peaks at 6-8 years, keeps 5-9 years strong, and
   allows exceptional 4-5 year candidates without letting them dominate.
 - `early_band_mult` - extra safeguard for 4.0-4.5 year candidates; they need strong retrieval/prod
