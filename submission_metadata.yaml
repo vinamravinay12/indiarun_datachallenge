@@ -62,7 +62,7 @@ compute:
 # ============================================================================
 ai_tools_used:
   - "Claude"        # architecture, scoring design, code review, the .py reproducer
-  - "Other"         # OpenAI Codex CLI - weight tuning, candidate spot-checks
+  - "Codex"         # OpenAI Codex CLI - weight tuning, candidate spot-checks
 
 ai_usage_summary: |
   Claude (Claude Code) was used as a pair-engineer for architecture discussion, scoring design,
