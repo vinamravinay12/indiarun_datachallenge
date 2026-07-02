@@ -425,8 +425,12 @@ def honeypot_reasons(c):
     ec = exp_claim_anachronism(lc(p.get('summary')) + ' ' + lc(p.get('headline')))
     if ec:
         r.append('summary_' + ec)
-    dated = sorted([(parse_date(j.get('start_date')), parse_date(j.get('end_date'))) for j in ch
-                    if parse_date(j.get('start_date')) and parse_date(j.get('end_date'))], key=lambda x: x[0])
+    dated = []
+    for j in ch:
+        s = parse_date(j.get('start_date')); e = parse_date(j.get('end_date'))
+        if s and e:
+            dated.append((s, e))
+    dated.sort()
     for i in range(len(dated) - 1):
         s1, e1 = dated[i]; s2, e2 = dated[i + 1]
         if s2 < e1 and (min(e1, e2) - s2).days > 365:
